@@ -79,6 +79,8 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
+![Xmarks Dashboard](image.png)
+
 ## Exporting Bookmarks from X
 
 This project uses [Twitter Web Exporter](https://github.com/prinsss/twitter-web-exporter) with Tampermonkey to export bookmarks and associated media from X.
