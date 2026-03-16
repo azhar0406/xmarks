@@ -1,4 +1,4 @@
-# Xmark - X Bookmark Dashboard
+# Xmarks - X Bookmark Dashboard
 
 A local-first, dark-themed dashboard to organise, browse, and rediscover your X (Twitter) bookmarks. It gives you the feel of exploring x.com in dark mode — with AI-powered auto-categorisation, full-text search, random bookmark surfacing, and one-click data management.
 
@@ -39,8 +39,8 @@ Built as a hobby project to actually *do something* with all those bookmarked po
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/xmark.git
-cd xmark
+git clone https://github.com/azhar0406/xmarks.git
+cd xmarks
 ```
 
 ### 2. Install dependencies
@@ -107,7 +107,7 @@ This project uses [Twitter Web Exporter](https://github.com/prinsss/twitter-web-
 After exporting, extract/copy all media files into the `media/` folder at the project root:
 
 ```
-xmark/
+xmarks/
   media/
     username_tweetid_photo_1_20230101.jpg
     username_tweetid_video_1_20230101.mp4
@@ -118,7 +118,7 @@ xmark/
 
 The system automatically maps media files to their associated bookmarks based on the filename pattern. No manual linking required.
 
-## Importing into Xmark
+## Importing into Xmarks
 
 1. Start the dev server (`npm run dev`)
 2. Go to **Settings** (gear icon in sidebar)
@@ -139,7 +139,7 @@ The system automatically maps media files to their associated bookmarks based on
 ## Project Structure
 
 ```
-xmark/
+xmarks/
 ├── media/                  # Exported media files (gitignored contents)
 ├── src/
 │   ├── components/
