@@ -201,8 +201,10 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
       setMessage('Category added successfully!');
       setTimeout(() => setMessage(''), 3000);
     } catch (error) {
-      setMessage('Error adding category');
-      setTimeout(() => setMessage(''), 3000);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[Settings] Error adding category:', error);
+      setMessage(`Error adding category: ${errorMsg}`);
+      setTimeout(() => setMessage(''), 5000);
     }
   };
 
@@ -351,6 +353,9 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
 
           if (result.failed > 0) {
             addLog('warning', `Batch ${batchNum}: ${result.success} succeeded, ${result.failed} failed`);
+            if (result.errors && result.errors.length > 0) {
+              result.errors.forEach((err: string) => addLog('error', err));
+            }
           } else {
             addLog('success', `Batch ${batchNum}: ${result.success} bookmarks imported successfully`);
           }
@@ -409,6 +414,7 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
 
       setImportProgress({ current: 0, total: 0 });
       checkStorageUsage();
+      onDatabaseImport?.();
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       addLog('error', `Import failed: ${errorMsg}`);
