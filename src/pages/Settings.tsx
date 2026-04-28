@@ -42,10 +42,10 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
     }
   };
 
-  const handleExportDatabase = () => {
+  const handleExportDatabase = async () => {
     console.log('[Settings] Export button clicked');
     try {
-      const data = db.exportDatabase();
+      const data = await db.exportDatabase();
       console.log('[Settings] Export data retrieved:', data ? `${data.length} bytes` : 'null');
 
       if (!data) {
