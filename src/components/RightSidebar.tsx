@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, Bookmark } from '../lib/database';
 import { Sparkles, ExternalLink } from 'lucide-react';
+import { DEFAULT_AVATAR_URL, handleAvatarError } from '../lib/assets';
 
 export default function RightSidebar() {
   const [randomBookmarks, setRandomBookmarks] = useState<Bookmark[]>([]);
@@ -72,9 +73,10 @@ export default function RightSidebar() {
             >
               <div className="flex items-start gap-2 mb-2">
                 <img
-                  src={bookmark.profile_image_url || 'https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png'}
+                  src={bookmark.profile_image_url || DEFAULT_AVATAR_URL}
                   alt={bookmark.name}
-                  className="w-8 h-8 rounded-full flex-shrink-0"
+                  className="w-8 h-8 rounded-full flex-shrink-0 bg-gray-800"
+                  onError={handleAvatarError}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-white text-sm truncate">

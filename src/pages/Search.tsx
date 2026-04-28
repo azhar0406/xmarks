@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { db, Bookmark } from '../lib/database';
 import BookmarkCard from '../components/BookmarkCard';
 import { Search as SearchIcon, Loader2 } from 'lucide-react';
+import { DEFAULT_AVATAR_URL, handleAvatarError } from '../lib/assets';
 
 export default function Search() {
   const [query, setQuery] = useState('');
@@ -87,9 +88,10 @@ export default function Search() {
                   >
                     <div className="flex items-center gap-3">
                       <img
-                        src={suggestion.profile_image_url || 'https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png'}
+                        src={suggestion.profile_image_url || DEFAULT_AVATAR_URL}
                         alt={suggestion.name}
-                        className="w-10 h-10 rounded-full"
+                        className="w-10 h-10 rounded-full bg-gray-800"
+                        onError={handleAvatarError}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">

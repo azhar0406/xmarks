@@ -1,5 +1,7 @@
-import { Heart, Repeat2, MessageCircle, BarChart3, Bookmark as BookmarkIcon, ExternalLink } from 'lucide-react';
+import { useState } from 'react';
+import { Heart, Repeat2, MessageCircle, BarChart3, Bookmark as BookmarkIcon, ExternalLink, ImageOff } from 'lucide-react';
 import { Bookmark } from '../lib/database';
+import { DEFAULT_AVATAR_URL, handleAvatarError } from '../lib/assets';
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
@@ -12,7 +14,27 @@ interface MediaItem {
   original?: string;
 }
 
+const PHOTO_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp']);
+
+const extractPhotoExtension = (url: string | undefined): string => {
+  if (!url) return 'jpg';
+  const match = url.match(/\.([a-zA-Z0-9]{2,5})(?:[?#]|$)/);
+  if (!match) return 'jpg';
+  const ext = match[1].toLowerCase();
+  return PHOTO_EXTS.has(ext) ? ext : 'jpg';
+};
+
 export default function BookmarkCard({ bookmark }: BookmarkCardProps) {
+  const [failedMedia, setFailedMedia] = useState<Set<number>>(new Set());
+
+  const markMediaFailed = (idx: number) => {
+    setFailedMedia((prev) => {
+      if (prev.has(idx)) return prev;
+      const next = new Set(prev);
+      next.add(idx);
+      return next;
+    });
+  };
   const formatNumber = (num: number) => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
@@ -34,9 +56,19 @@ export default function BookmarkCard({ bookmark }: BookmarkCardProps) {
   const getLocalMediaPath = (media: MediaItem, index: number) => {
     const date = new Date(bookmark.created_at);
     const dateStr = date.toISOString().split('T')[0].replace(/-/g, '');
-    const ext = media.type === 'photo' ? 'jpg' : 'mp4';
+    const isVideoLike = media.type === 'video' || media.type === 'animated_gif';
+    const ext = isVideoLike
+      ? 'mp4'
+      : extractPhotoExtension(media.original || media.url || media.thumbnail);
     const path = `/media/${bookmark.screen_name}_${bookmark.id}_${media.type}_${index + 1}_${dateStr}.${ext}`;
-    console.log('Media path:', path, 'Media data:', media);
+    console.log('[Media] Trying path:', path, {
+      tweetId: bookmark.id,
+      screen_name: bookmark.screen_name,
+      created_at: bookmark.created_at,
+      type: media.type,
+      index: index + 1,
+      mediaUrls: { url: media.url, original: media.original, thumbnail: media.thumbnail },
+    });
     return path;
   };
 
@@ -46,9 +78,10 @@ export default function BookmarkCard({ bookmark }: BookmarkCardProps) {
     <div className="border-b border-gray-800 p-4 hover:bg-gray-900/50 transition-colors">
       <div className="flex gap-3">
         <img
-          src={bookmark.profile_image_url || 'https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png'}
+          src={bookmark.profile_image_url || DEFAULT_AVATAR_URL}
           alt={bookmark.name}
-          className="w-12 h-12 rounded-full flex-shrink-0"
+          className="w-12 h-12 rounded-full flex-shrink-0 bg-gray-800"
+          onError={handleAvatarError}
         />
 
         <div className="flex-1 min-w-0">
@@ -86,46 +119,61 @@ export default function BookmarkCard({ bookmark }: BookmarkCardProps) {
               mediaArray.length === 3 ? 'grid-cols-2' :
               'grid-cols-2'
             }`}>
-              {mediaArray.map((media: MediaItem, idx: number) => (
-                <div
-                  key={idx}
-                  className={`${
-                    mediaArray.length === 3 && idx === 0 ? 'col-span-2' : ''
-                  } bg-gray-900 relative overflow-hidden ${
-                    mediaArray.length === 1 ? 'max-h-[510px]' : 'h-[288px]'
-                  }`}
-                >
-                  {media.type === 'photo' ? (
-                    <img
-                      src={getLocalMediaPath(media, idx)}
-                      alt=""
-                      className={`w-full h-full ${
-                        mediaArray.length === 1 ? 'object-contain' : 'object-cover'
-                      }`}
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = media.original || media.thumbnail || '';
-                      }}
-                    />
-                  ) : (
-                    <video
-                      src={getLocalMediaPath(media, idx)}
-                      controls
-                      className={`w-full h-full ${
-                        mediaArray.length === 1 ? 'object-contain' : 'object-cover'
-                      }`}
-                      poster={media.thumbnail}
-                      preload="metadata"
-                      onError={(e) => {
-                        const target = e.target as HTMLVideoElement;
-                        if (media.url) {
-                          target.src = media.url;
-                        }
-                      }}
-                    />
-                  )}
-                </div>
-              ))}
+              {mediaArray.map((media: MediaItem, idx: number) => {
+                const failed = failedMedia.has(idx);
+                return (
+                  <div
+                    key={idx}
+                    className={`${
+                      mediaArray.length === 3 && idx === 0 ? 'col-span-2' : ''
+                    } bg-gray-900 relative overflow-hidden ${
+                      mediaArray.length === 1 ? 'max-h-[510px]' : 'h-[288px]'
+                    }`}
+                  >
+                    {failed ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 gap-2 min-h-[160px]">
+                        <ImageOff size={32} />
+                        <span className="text-xs">Media unavailable</span>
+                      </div>
+                    ) : media.type === 'photo' ? (
+                      <img
+                        src={getLocalMediaPath(media, idx)}
+                        alt=""
+                        className={`w-full h-full ${
+                          mediaArray.length === 1 ? 'object-contain' : 'object-cover'
+                        }`}
+                        onError={(e) => {
+                          console.warn('[Media] Photo failed to load:', (e.currentTarget as HTMLImageElement).src, {
+                            tweetId: bookmark.id,
+                            screen_name: bookmark.screen_name,
+                          });
+                          markMediaFailed(idx);
+                        }}
+                      />
+                    ) : (
+                      <video
+                        src={getLocalMediaPath(media, idx)}
+                        {...(media.type === 'animated_gif'
+                          ? { autoPlay: true, loop: true, muted: true, playsInline: true }
+                          : { controls: true })}
+                        className={`w-full h-full ${
+                          mediaArray.length === 1 ? 'object-contain' : 'object-cover'
+                        }`}
+                        preload="metadata"
+                        onError={(e) => {
+                          console.warn('[Media] Video failed to load:', (e.currentTarget as HTMLVideoElement).src, {
+                            tweetId: bookmark.id,
+                            screen_name: bookmark.screen_name,
+                            mediaType: media.type,
+                            error: (e.currentTarget as HTMLVideoElement).error,
+                          });
+                          markMediaFailed(idx);
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
