@@ -434,6 +434,59 @@ class BookmarkDatabase {
     }
   }
 
+  async getBookmarksByCategory(category: string): Promise<Bookmark[]> {
+    if (!this.db) await this.init();
+    if (!this.db) return [];
+
+    try {
+      const result = this.db.exec(
+        `SELECT * FROM bookmarks WHERE category = ? ORDER BY created_at DESC`,
+        [category]
+      );
+
+      if (result.length === 0) return [];
+
+      const columns = result[0].columns;
+      const values = result[0].values;
+
+      return values.map((row: any[]) => {
+        const bookmark: any = {};
+        columns.forEach((col, idx) => {
+          bookmark[col] = row[idx];
+        });
+        return bookmark as Bookmark;
+      });
+    } catch (error) {
+      console.error('[Database] Error getting bookmarks by category:', error);
+      return [];
+    }
+  }
+
+  async getAllBookmarks(): Promise<Bookmark[]> {
+    if (!this.db) await this.init();
+    if (!this.db) return [];
+
+    try {
+      const result = this.db.exec(`SELECT * FROM bookmarks ORDER BY created_at DESC`);
+
+      if (result.length === 0) return [];
+
+      const columns = result[0].columns;
+      const values = result[0].values;
+
+      return values.map((row: any[]) => {
+        const bookmark: any = {};
+        columns.forEach((col, idx) => {
+          bookmark[col] = row[idx];
+        });
+        return bookmark as Bookmark;
+      });
+    } catch (error) {
+      console.error('[Database] Error getting all bookmarks:', error);
+      return [];
+    }
+  }
+
   private serializeMedia(media: any): string | null {
     if (!media) return null;
     if (typeof media === 'string') return media;

@@ -26,6 +26,7 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
   const [storageInfo, setStorageInfo] = useState({ used: 0, limit: 0 });
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [autoCategorize, setAutoCategorize] = useState(false);
+  const [recategorizeSource, setRecategorizeSource] = useState<string>('__uncategorized__');
 
   const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
   const mediaPath = import.meta.env.VITE_MEDIA_PATH;
@@ -449,15 +450,29 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
     setCategorizing(true);
     setMessage('');
 
-    addLog('info', 'Starting AI categorization process...');
+    const sourceLabel =
+      recategorizeSource === '__uncategorized__'
+        ? 'Uncategorized'
+        : recategorizeSource === '__all__'
+          ? 'All'
+          : recategorizeSource;
+
+    addLog('info', `Starting AI categorization process (source: ${sourceLabel})...`);
 
     try {
-      addLog('info', 'Fetching uncategorized bookmarks...');
-      const bookmarks = await db.getUncategorizedBookmarks();
+      addLog('info', `Fetching bookmarks from: ${sourceLabel}`);
+      let bookmarks;
+      if (recategorizeSource === '__uncategorized__') {
+        bookmarks = await db.getUncategorizedBookmarks();
+      } else if (recategorizeSource === '__all__') {
+        bookmarks = await db.getAllBookmarks();
+      } else {
+        bookmarks = await db.getBookmarksByCategory(recategorizeSource);
+      }
 
       if (!bookmarks || bookmarks.length === 0) {
-        addLog('warning', 'No uncategorized bookmarks found');
-        setMessage('No uncategorized bookmarks found!');
+        addLog('warning', `No bookmarks found in: ${sourceLabel}`);
+        setMessage(`No bookmarks found in: ${sourceLabel}`);
         setCategorizing(false);
         setAbortController(null);
         setTimeout(() => setMessage(''), 3000);
@@ -757,8 +772,32 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
           <h3 className="text-lg font-semibold text-white mb-4">AI Categorization</h3>
           <div className="space-y-4">
             <p className="text-gray-400">
-              Use AI to automatically categorize your uncategorized bookmarks using Grok 4 Fast
+              Use AI to categorize bookmarks using Grok 4 Fast. Pick a source below — the AI will assign each bookmark to one of your existing categories.
             </p>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Source to categorize</label>
+              <select
+                value={recategorizeSource}
+                onChange={(e) => setRecategorizeSource(e.target.value)}
+                disabled={categorizing}
+                className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="__uncategorized__">Uncategorized only</option>
+                <option value="__all__">All bookmarks (re-categorize everything)</option>
+                {categories
+                  .filter((c) => c.name !== 'Uncategorized')
+                  .map((c) => (
+                    <option key={c.id} value={c.name}>
+                      Re-categorize: {c.name} ({c.count})
+                    </option>
+                  ))}
+              </select>
+              <p className="text-gray-500 text-xs mt-2">
+                AI can only assign bookmarks to categories that exist in your list above.
+              </p>
+            </div>
+
             <div className="flex gap-3">
               <button
                 onClick={categorizeWithAI}
@@ -773,7 +812,9 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
                 ) : (
                   <>
                     <Zap size={20} />
-                    Categorize with AI
+                    {recategorizeSource === '__uncategorized__'
+                      ? 'Categorize with AI'
+                      : 'Re-categorize with AI'}
                   </>
                 )}
               </button>
