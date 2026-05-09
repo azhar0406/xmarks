@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, Bookmark } from '../lib/database';
+import { db, Bookmark, Category } from '../lib/database';
 import BookmarkCard from '../components/BookmarkCard';
 import { Loader2 } from 'lucide-react';
 
@@ -9,10 +9,12 @@ interface CategoryViewProps {
 
 export default function CategoryView({ categoryName }: CategoryViewProps) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [categoryList, setCategoryList] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadBookmarks();
+    db.getCategoriesWithCounts().then(setCategoryList);
   }, [categoryName]);
 
   const loadBookmarks = async () => {
@@ -20,6 +22,16 @@ export default function CategoryView({ categoryName }: CategoryViewProps) {
     const data = await db.getBookmarks(1000, 0, categoryName);
     setBookmarks(data);
     setLoading(false);
+  };
+
+  const handleBookmarkDelete = (id: string) => {
+    setBookmarks((prev) => prev.filter((b) => b.id !== id));
+  };
+
+  const handleBookmarkCategoryChange = (id: string, newCategory: string) => {
+    if (newCategory !== categoryName) {
+      setBookmarks((prev) => prev.filter((b) => b.id !== id));
+    }
   };
 
   return (
@@ -46,7 +58,13 @@ export default function CategoryView({ categoryName }: CategoryViewProps) {
       ) : (
         <div>
           {bookmarks.map((bookmark) => (
-            <BookmarkCard key={bookmark.id} bookmark={bookmark} />
+            <BookmarkCard
+              key={bookmark.id}
+              bookmark={bookmark}
+              categories={categoryList}
+              onDelete={handleBookmarkDelete}
+              onCategoryChange={handleBookmarkCategoryChange}
+            />
           ))}
         </div>
       )}

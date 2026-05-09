@@ -582,6 +582,15 @@ class BookmarkDatabase {
       console.error('[Database] Error updating bookmark category:', error);
     }
   }
+
+  async deleteBookmark(id: string): Promise<void> {
+    if (!this.db) await this.init();
+    if (!this.db) return;
+
+    this.db.run('DELETE FROM bookmarks WHERE id = ?', [id]);
+    await this.saveToFile();
+    console.log('[Database] Bookmark deleted:', id);
+  }
 }
 
 export const db = new BookmarkDatabase();

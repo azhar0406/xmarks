@@ -6,6 +6,7 @@ import Search from './pages/Search';
 import CategoryView from './pages/CategoryView';
 import Settings from './pages/Settings';
 import { Category } from './lib/database';
+import { ToastProvider } from './components/Toast';
 
 interface CategoryWithCount extends Category {
   count: number;
@@ -27,15 +28,17 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-black">
-      <div className="flex min-h-screen mx-[10%]">
-        <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} categories={categories} />
-        <main className="flex-1 overflow-y-auto">
-          {renderPage()}
-        </main>
-        <RightSidebar />
+    <ToastProvider>
+      <div className="min-h-screen bg-black">
+        <div className="flex min-h-screen mx-[10%]">
+          <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} categories={categories} />
+          <main className="flex-1 overflow-y-auto">
+            {renderPage()}
+          </main>
+          <RightSidebar />
+        </div>
       </div>
-    </div>
+    </ToastProvider>
   );
 }
 

@@ -14,6 +14,7 @@ interface HomeProps {
 
 export default function Home({ onCategoriesUpdate }: HomeProps) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [categoryList, setCategoryList] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -31,7 +32,17 @@ export default function Home({ onCategoriesUpdate }: HomeProps) {
 
   const loadCategories = async () => {
     const data = await db.getCategoriesWithCounts();
+    setCategoryList(data);
     onCategoriesUpdate?.(data);
+  };
+
+  const handleBookmarkDelete = (id: string) => {
+    setBookmarks((prev) => prev.filter((b) => b.id !== id));
+    loadCategories();
+  };
+
+  const handleBookmarkCategoryChange = () => {
+    loadCategories();
   };
 
   useEffect(() => {
@@ -203,7 +214,12 @@ export default function Home({ onCategoriesUpdate }: HomeProps) {
           <div>
             {bookmarks.map((bookmark) => (
               <div key={bookmark.id} id={`bookmark-${bookmark.id}`} className="transition-all">
-                <BookmarkCard bookmark={bookmark} />
+                <BookmarkCard
+                  bookmark={bookmark}
+                  categories={categoryList}
+                  onDelete={handleBookmarkDelete}
+                  onCategoryChange={handleBookmarkCategoryChange}
+                />
               </div>
             ))}
           </div>

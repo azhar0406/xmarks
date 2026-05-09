@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { db, Bookmark } from '../lib/database';
+import { useState, useRef, useEffect } from 'react';
+import { db, Bookmark, Category } from '../lib/database';
 import BookmarkCard from '../components/BookmarkCard';
 import { Search as SearchIcon, Loader2 } from 'lucide-react';
 import { DEFAULT_AVATAR_URL, handleAvatarError } from '../lib/assets';
@@ -7,11 +7,20 @@ import { DEFAULT_AVATAR_URL, handleAvatarError } from '../lib/assets';
 export default function Search() {
   const [query, setQuery] = useState('');
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [categoryList, setCategoryList] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [suggestions, setSuggestions] = useState<Bookmark[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchTimeout = useRef<NodeJS.Timeout>();
+
+  useEffect(() => {
+    db.getCategoriesWithCounts().then(setCategoryList);
+  }, []);
+
+  const handleBookmarkDelete = (id: string) => {
+    setBookmarks((prev) => prev.filter((b) => b.id !== id));
+  };
 
   const handleSearchInput = (value: string) => {
     setQuery(value);
@@ -139,7 +148,12 @@ export default function Search() {
             </p>
           </div>
           {bookmarks.map((bookmark) => (
-            <BookmarkCard key={bookmark.id} bookmark={bookmark} />
+            <BookmarkCard
+              key={bookmark.id}
+              bookmark={bookmark}
+              categories={categoryList}
+              onDelete={handleBookmarkDelete}
+            />
           ))}
         </div>
       )}
