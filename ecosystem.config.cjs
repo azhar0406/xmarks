@@ -6,7 +6,7 @@ module.exports = {
       cwd: __dirname,
       env: {
         NODE_ENV: 'production',
-        MEDIA_DIR: '/var/www/xmarks/media',
+        MEDIA_DIR: './media',
         API_PORT: 3001,
       },
       max_memory_restart: '100M',
