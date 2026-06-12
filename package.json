@@ -8,11 +8,18 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "api:dev": "node server.js",
+    "api:start": "pm2 start ecosystem.config.cjs",
+    "api:stop": "pm2 stop xmarks-api",
+    "api:restart": "pm2 restart xmarks-api"
   },
   "dependencies": {
     "@openrouter/sdk": "^0.2.9",
     "@supabase/supabase-js": "^2.98.0",
+    "@types/cors": "^2.8.19",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

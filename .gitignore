@@ -26,6 +26,10 @@ dist-ssr
 media/*
 !media/.gitkeep
 
+# Temp download files
+media-urls-*.txt
+
 # Tool configs
 .bolt
 .claude
+logs/

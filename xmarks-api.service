@@ -1,0 +1,19 @@
+[Unit]
+Description=Xmarks Media Download API Server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/xmarks
+ExecStart=/usr/local/bin/node server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=MEDIA_DIR=/var/www/xmarks/media
+Environment=API_PORT=3001
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

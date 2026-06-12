@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { db, Category } from '../lib/database';
-import { Plus, Trash2, Upload, Download, Loader2, Zap, XCircle } from 'lucide-react';
+import { Plus, Trash2, Upload, Download, Loader2, Zap, XCircle, Copy, Check } from 'lucide-react';
 import LogConsole from '../components/LogConsole';
 import { OpenRouter } from '@openrouter/sdk';
+import { extractMediaUrls, downloadMediaUrlsFile, startServerDownload, getDownloadStatus, checkApiHealth, DownloadJob, MediaItemWithMeta } from '../lib/mediaExtractor';
 
 interface LogEntry {
   timestamp: string;
@@ -27,6 +28,45 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [autoCategorize, setAutoCategorize] = useState(false);
   const [recategorizeSource, setRecategorizeSource] = useState<string>('__uncategorized__');
+  const [mediaUrls, setMediaUrls] = useState<MediaItemWithMeta[]>(() => {
+    try {
+      const saved = localStorage.getItem('pendingMediaUrls');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (typeof parsed[0] === 'string') {
+          // Old format: mark for regeneration on mount
+          return [];
+        }
+        return parsed;
+      }
+      return [];
+    } catch { return []; }
+  });
+
+  const [mediaDownloaded, setMediaDownloaded] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState(false);
+  const [apiOnline, setApiOnline] = useState(false);
+  const [downloadJob, setDownloadJob] = useState<DownloadJob | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const MEDIA_URLS_KEY = 'pendingMediaUrls';
+
+  const saveMediaUrls = (items: MediaItemWithMeta[]) => {
+    setMediaUrls(items);
+    if (items.length > 0) {
+      localStorage.setItem(MEDIA_URLS_KEY, JSON.stringify(items));
+    } else {
+      localStorage.removeItem(MEDIA_URLS_KEY);
+    }
+  };
+
+  const clearMediaUrls = () => {
+    setMediaUrls([]);
+    setMediaDownloaded(false);
+    localStorage.removeItem(MEDIA_URLS_KEY);
+  };
 
   const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
   const mediaPath = import.meta.env.VITE_MEDIA_PATH;
@@ -153,12 +193,57 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
 
   useEffect(() => {
     initializeApp();
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
+
+  const [regeneratingUrls, setRegeneratingUrls] = useState(false);
 
   const initializeApp = async () => {
     await seedDefaultCategories();
     await loadCategories();
     checkStorageUsage();
+    // Check API health, then re-check every 10 seconds
+    const check = async () => { setApiOnline(await checkApiHealth()); };
+    await check();
+    const apiCheck = setInterval(check, 10000);
+    // If old-format URLs detected, regenerate filenames from database
+    await regenerateOldUrls();
+    return () => clearInterval(apiCheck);
+  };
+
+  const regenerateOldUrls = async () => {
+    try {
+      const saved = localStorage.getItem('pendingMediaUrls');
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed) || parsed.length === 0 || typeof parsed[0] !== 'string') return;
+
+      setRegeneratingUrls(true);
+      addLog('info', `Regenerating filenames for ${parsed.length} old-format URLs...`);
+      const allBookmarks = await db.getAllBookmarks();
+      const newItems = extractMediaUrls(allBookmarks);
+
+      if (newItems.length > 0) {
+        saveMediaUrls(newItems);
+        addLog('success', `Regenerated filenames for ${newItems.length} media URLs from database`);
+      } else {
+        // Fallback: keep old URLs but generate simple filenames from the URLs
+        const fallbackItems = parsed.map((url: string) => {
+          const urlPath = url.split('?')[0];
+          const parts = urlPath.split('/');
+          const mediaId = parts[parts.length - 1] || 'unknown';
+          const extMatch = urlPath.match(/\.([a-zA-Z0-9]+)$/);
+          const ext = extMatch ? extMatch[1] : (url.includes('video') || url.includes('tweet_video') ? 'mp4' : 'jpg');
+          return { url, filename: `${mediaId}.${ext}` };
+        });
+        saveMediaUrls(fallbackItems);
+        addLog('success', `Generated fallback filenames for ${fallbackItems.length} URLs`);
+      }
+      setRegeneratingUrls(false);
+    } catch (error) {
+      console.error('Error regenerating URLs:', error);
+      setRegeneratingUrls(false);
+    }
   };
 
   const seedDefaultCategories = async () => {
@@ -255,7 +340,7 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
     });
 
     const completion = await openrouter.chat.send({
-      model: 'x-ai/grok-4-fast',
+      model: 'deepseek/deepseek-v4-flash',
       messages: [
         {
           role: 'system',
@@ -328,6 +413,13 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
 
       const validBookmarks = bookmarks.filter(b => b && b.id);
       addLog('info', `Found ${validBookmarks.length} valid bookmarks to import`);
+
+      // Extract unique media URLs for aria2c download
+      const mediaItems = extractMediaUrls(validBookmarks);
+      if (mediaItems.length > 0) {
+        saveMediaUrls(mediaItems);
+        addLog('info', `Found ${mediaItems.length} unique media URLs for download`);
+      }
 
       if (autoCategorize) {
         addLog('info', 'Auto-categorization is enabled. Processing bookmarks with AI...');
@@ -415,7 +507,14 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
 
       setImportProgress({ current: 0, total: 0 });
       checkStorageUsage();
-      onDatabaseImport?.();
+
+      if (mediaItems.length > 0) {
+        addLog('info', `Media download ready: ${mediaItems.length} unique URLs. Use the Media Download section below.`);
+        setMessage(`Imported ${totalImported} bookmarks. ${mediaItems.length} media URLs ready for download below.`);
+        // Don't reload — user needs the Media Download section. Data is already in DB.
+      } else {
+        onDatabaseImport?.();
+      }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       addLog('error', `Import failed: ${errorMsg}`);
@@ -500,7 +599,7 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
           });
 
           const completion = await openrouter.chat.send({
-            model: 'x-ai/grok-4-fast',
+            model: 'deepseek/deepseek-v4-flash',
             messages: [
               {
                 role: 'system',
@@ -835,6 +934,159 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
             )}
           </div>
         </section>
+
+        {mediaUrls.length > 0 && (
+          <section className="bg-gray-900 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Media Download</h3>
+            <div className="space-y-4">
+              <div className="bg-green-500/20 border border-green-500 text-green-400 px-4 py-3 rounded-lg">
+                <p className="font-semibold mb-1">{mediaUrls.length} unique media URLs extracted</p>
+                <p className="text-sm">
+                  {apiOnline
+                    ? 'Click "Download to Server" to fetch all files in parallel via aria2c.'
+                    : 'Start the API server, then click "Download to Server". Or download media-urls.txt and run manually.'}
+                </p>
+              </div>
+
+              {/* Server download button */}
+              <button
+                onClick={async () => {
+                  if (!apiOnline) {
+                    setMessage('API server is not running! Start it with: node server.js');
+                    setTimeout(() => setMessage(''), 5000);
+                    return;
+                  }
+                  setDownloading(true);
+                  addLog('info', `Sending ${mediaUrls.length} URLs to server for download...`);
+                  try {
+                    const job = await startServerDownload(mediaUrls);
+                    setDownloadJob(job);
+                    addLog('success', `Download job started: ${job.jobId} (${job.total} files)`);
+                    setMessage(`Download started! Job ${job.jobId} — ${job.total} files downloading...`);
+                    // Poll for status
+                    if (pollRef.current) clearInterval(pollRef.current);
+                    pollRef.current = setInterval(async () => {
+                      try {
+                        const status = await getDownloadStatus(job.jobId);
+                        setDownloadJob(status);
+                        if (status.status === 'completed' || status.status === 'error') {
+                          if (pollRef.current) clearInterval(pollRef.current);
+                          pollRef.current = null;
+                          setDownloading(false);
+                          if (status.status === 'completed') {
+                            addLog('success', `Download complete! ${status.completed} files saved to server.`);
+                            setMessage('All media downloaded successfully!');
+                          } else {
+                            addLog('error', `Download failed: ${status.error}`);
+                            setMessage('Download failed. Check server logs.');
+                          }
+                          setTimeout(() => setMessage(''), 5000);
+                        }
+                      } catch {
+                        if (pollRef.current) clearInterval(pollRef.current);
+                        pollRef.current = null;
+                        setDownloading(false);
+                      }
+                    }, 2000);
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : 'Unknown error';
+                    addLog('error', `Failed to start download: ${msg}`);
+                    setMessage(`Server error: ${msg}`);
+                    setDownloading(false);
+                  }
+                }}
+                disabled={downloading}
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {downloading ? (
+                  <>
+                    <Loader2 className="animate-spin" size={18} />
+                    Downloading to server...
+                  </>
+                ) : (
+                  <>
+                    <Download size={18} />
+                    Download to Server ({mediaUrls.length} files)
+                  </>
+                )}
+              </button>
+
+              {/* Download progress */}
+              {downloadJob && (
+                <div className="bg-gray-800 rounded-lg p-4 space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Job {downloadJob.jobId}</span>
+                    <span className={
+                      downloadJob.status === 'completed' ? 'text-green-400' :
+                      downloadJob.status === 'error' ? 'text-red-400' : 'text-blue-400'
+                    }>
+                      {downloadJob.status === 'completed' ? '✓ Complete' :
+                       downloadJob.status === 'error' ? '✗ Failed' :
+                       '⏳ Running...'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${downloadJob.total > 0 ? (downloadJob.completed / downloadJob.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>{downloadJob.completed} / {downloadJob.total} downloaded</span>
+                    {downloadJob.failed > 0 && <span className="text-red-400">{downloadJob.failed} failed</span>}
+                  </div>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="border-t border-gray-800 pt-4">
+                <p className="text-gray-500 text-xs mb-3">Manual fallback — download the URL list and run aria2c yourself:</p>
+                <button
+                  onClick={() => {
+                    downloadMediaUrlsFile(mediaUrls);
+                    setMediaDownloaded(true);
+                    addLog('success', 'media-urls.txt downloaded');
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
+                >
+                  <Download size={18} />
+                  Download media-urls.txt
+                </button>
+
+                {mediaDownloaded && (
+                  <div className="bg-gray-800 rounded-lg p-3 mt-3">
+                    <div className="flex items-center gap-2 bg-gray-900 rounded-lg p-3">
+                      <code className="flex-1 text-green-400 text-xs font-mono break-all">
+                        aria2c -i media-urls.txt -x 4 -s 4 --max-connection-per-server=4 -d /var/www/xmarks/media
+                      </code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText('aria2c -i media-urls.txt -x 4 -s 4 --max-connection-per-server=4 -d /var/www/xmarks/media');
+                          setCopiedCommand(true);
+                          setTimeout(() => setCopiedCommand(false), 2000);
+                        }}
+                        className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
+                      >
+                        {copiedCommand ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Done button */}
+              <button
+                onClick={() => {
+                  clearMediaUrls();
+                  onDatabaseImport?.();
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-400 font-semibold py-3 px-4 rounded-lg transition-colors"
+              >
+                Done — Refresh Page
+              </button>
+            </div>
+          </section>
+        )}
 
         <section>
           <LogConsole logs={logs} onClear={clearLogs} />
