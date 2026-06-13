@@ -154,7 +154,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
  * Start a server-side aria2c download via the API.
  */
 export async function startServerDownload(items: MediaItemWithMeta[]): Promise<DownloadJob> {
-  const res = await fetch(`${API_BASE}/api/download-media`, {
+  const res = await fetch(`${API_BASE}/download-media`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ items }),
@@ -170,7 +170,7 @@ export async function startServerDownload(items: MediaItemWithMeta[]): Promise<D
  * Poll the status of a download job.
  */
 export async function getDownloadStatus(jobId: string): Promise<DownloadJob> {
-  const res = await fetch(`${API_BASE}/api/download-status/${jobId}`);
+  const res = await fetch(`${API_BASE}/download-status/${jobId}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -180,7 +180,7 @@ export async function getDownloadStatus(jobId: string): Promise<DownloadJob> {
  */
 export async function checkApiHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/api/health`);
+    const res = await fetch(`${API_BASE}/health`);
     return res.ok;
   } catch {
     return false;
