@@ -45,12 +45,12 @@ const PORT = process.env.API_PORT || 3001;
 const downloads = new Map();
 
 // Health check
-app.get('/api/health', (_req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ ok: true, mediaDir: MEDIA_DIR });
 });
 
 // Start a download job
-app.post('/api/download-media', async (req, res) => {
+app.post('/download-media', async (req, res) => {
   const { items, urls } = req.body;
 
   // Support both old format (just urls) and new format (items with metadata)
@@ -176,7 +176,7 @@ app.post('/api/download-media', async (req, res) => {
 });
 
 // Check download status
-app.get('/api/download-status/:jobId', (req, res) => {
+app.get('/download-status/:jobId', (req, res) => {
   const job = downloads.get(req.params.jobId);
   if (!job) {
     return res.status(404).json({ error: 'Job not found' });
