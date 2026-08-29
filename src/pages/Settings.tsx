@@ -50,6 +50,7 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
   const [downloadJob, setDownloadJob] = useState<DownloadJob | null>(null);
   const [downloading, setDownloading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const apiCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const MEDIA_URLS_KEY = 'pendingMediaUrls';
 
@@ -193,7 +194,10 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
 
   useEffect(() => {
     initializeApp();
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (apiCheckRef.current) clearInterval(apiCheckRef.current);
+    };
   }, []);
 
   const [regeneratingUrls, setRegeneratingUrls] = useState(false);
@@ -205,10 +209,10 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
     // Check API health, then re-check every 10 seconds
     const check = async () => { setApiOnline(await checkApiHealth()); };
     await check();
-    const apiCheck = setInterval(check, 10000);
+    if (apiCheckRef.current) clearInterval(apiCheckRef.current);
+    apiCheckRef.current = setInterval(check, 10000);
     // If old-format URLs detected, regenerate filenames from database
     await regenerateOldUrls();
-    return () => clearInterval(apiCheck);
   };
 
   const regenerateOldUrls = async () => {
@@ -871,7 +875,7 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
           <h3 className="text-lg font-semibold text-white mb-4">AI Categorization</h3>
           <div className="space-y-4">
             <p className="text-gray-400">
-              Use AI to categorize bookmarks using Grok 4 Fast. Pick a source below — the AI will assign each bookmark to one of your existing categories.
+              Use AI to categorize bookmarks via OpenRouter (DeepSeek V4 Flash). Pick a source below — the AI will assign each bookmark to one of your existing categories.
             </p>
 
             <div>
@@ -935,10 +939,11 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
           </div>
         </section>
 
-        {mediaUrls.length > 0 && (
+        {(mediaUrls.length > 0 || downloadJob) && (
           <section className="bg-gray-900 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-white mb-4">Media Download</h3>
             <div className="space-y-4">
+              {mediaUrls.length > 0 && (
               <div className="bg-green-500/20 border border-green-500 text-green-400 px-4 py-3 rounded-lg">
                 <p className="font-semibold mb-1">{mediaUrls.length} unique media URLs extracted</p>
                 <p className="text-sm">
@@ -947,8 +952,10 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
                     : 'Start the API server, then click "Download to Server". Or download media-urls.txt and run manually.'}
                 </p>
               </div>
+              )}
 
               {/* Server download button */}
+              {mediaUrls.length > 0 && (
               <button
                 onClick={async () => {
                   if (!apiOnline) {
@@ -976,6 +983,9 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
                           if (status.status === 'completed') {
                             addLog('success', `Download complete! ${status.completed} files saved to server.`);
                             setMessage('All media downloaded successfully!');
+                            // Job is done — drop the pending list so it doesn't reappear on the next visit.
+                            // downloadJob stays set so the result card remains visible until refresh.
+                            saveMediaUrls([]);
                           } else {
                             addLog('error', `Download failed: ${status.error}`);
                             setMessage('Download failed. Check server logs.');
@@ -1010,6 +1020,7 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
                   </>
                 )}
               </button>
+              )}
 
               {/* Download progress */}
               {downloadJob && (
@@ -1039,6 +1050,7 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
               )}
 
               {/* Divider */}
+              {mediaUrls.length > 0 && (
               <div className="border-t border-gray-800 pt-4">
                 <p className="text-gray-500 text-xs mb-3">Manual fallback — download the URL list and run aria2c yourself:</p>
                 <button
@@ -1073,11 +1085,13 @@ export default function Settings({ onDatabaseWipe, onDatabaseImport }: SettingsP
                   </div>
                 )}
               </div>
+              )}
 
               {/* Done button */}
               <button
                 onClick={() => {
                   clearMediaUrls();
+                  setDownloadJob(null);
                   onDatabaseImport?.();
                 }}
                 className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-400 font-semibold py-3 px-4 rounded-lg transition-colors"
