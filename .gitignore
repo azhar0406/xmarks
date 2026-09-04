@@ -33,3 +33,4 @@ media-urls-*.txt
 .bolt
 .claude
 logs/
+package-lock.json
